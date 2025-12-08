@@ -1,0 +1,604 @@
+---
+title: "analysis"
+author: "Yousra"
+date: "2025-05-08"
+output: html_document
+---
+
+```{r}
+library(terra)
+
+# Paths
+ndvi_dir <- "/home/yousra/Drone_drought/vignettes/NDVI_rasters_s"
+shapefile <- "/home/yousra/Drone_drought/data-raw/saillon.shp"
+output_dir <- file.path(ndvi_dir, "clipped")
+if (!dir.exists(output_dir)) dir.create(output_dir)
+
+# Load polygon
+polygon <- vect(shapefile)
+
+# List raster files
+ndvi_files <- list.files(ndvi_dir, pattern = "^NDVI_\\d{8}\\.tif$", full.names = TRUE)
+
+# Loop over rasters and clip
+for (file in ndvi_files) {
+  r <- rast(file)
+  
+  # Reproject polygon if needed
+  if (!same.crs(r, polygon)) {
+    polygon <- project(polygon, crs(r))
+  }
+
+  # Clip: crop then mask
+  r_clipped <- mask(crop(r, polygon), polygon)
+
+  # Save clipped raster
+  out_file <- file.path(output_dir, paste0("clipped_", basename(file)))
+  writeRaster(r_clipped, out_file, overwrite = TRUE)
+  
+  message("Saved clipped raster: ", out_file)
+}
+
+```
+
+
+
+```{r}
+library(terra)
+
+# Directory with clipped rasters
+clipped_dir <- "/home/yousra/Drone_drought/vignettes/NDVI_rasters_s/clipped"
+ndvi_files <- list.files(clipped_dir, pattern = "^clipped_NDVI_\\d{8}\\.tif$", full.names = TRUE)
+
+# Load and name rasters
+rasters <- lapply(ndvi_files, rast)
+titles <- gsub("^clipped_|\\.tif$", "", basename(ndvi_files))
+
+# Set up 2x2 plot layout
+par(mfrow = c(2, 2), mar = c(2, 2, 2, 4))
+
+# Plot each raster
+for (i in seq_along(rasters)) {
+  plot(rasters[[i]],
+       main = titles[i],
+       col = rev(terrain.colors(20)),
+       zlim = c(0, 1))
+}
+
+ndvi_june <- terra::rast(here::here("/home/yousra/Drone_drought/vignettes/NDVI_rasters/clipped/clipped_NDVI_20240613.tif"))
+ndvi_july <- terra::rast(here::here("/home/yousra/Drone_drought/vignettes/NDVI_rasters/clipped/clipped_NDVI_20240719.tif"))
+ndvi_aug <- terra::rast(here::here("/home/yousra/Drone_drought/vignettes/NDVI_rasters/clipped/clipped_NDVI_20240813.tif"))
+ndvi_sep <- terra::rast(here::here("/home/yousra/Drone_drought/vignettes/NDVI_rasters/clipped/clipped_NDVI_20240913.tif"))
+
+library(ggplot2)
+library(tidyterra)
+library(viridis)  # for perceptually uniform color maps
+
+p1 <- ggplot() +
+  tidyterra::geom_spatraster(data = ndvi_june) +
+  scale_fill_viridis_c(
+    option = "D",      # choose "D" for a good green-yellow scale
+    direction = 1,     # normal direction (low = dark, high = bright)
+    limits = c(0, 1),  # NDVI typically between 0 and 1
+    name = "NDVI",
+    na.value = "white"
+  ) +
+  theme_bw() +
+  theme(
+    legend.position = "bottom",
+    legend.key.size = unit(0.9, "cm"),
+    legend.text = element_text(size = 8),
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 12),
+    legend.title = element_text(size = 12),
+    legend.margin = margin(t = 0, r = 0, b = 0, l = 0)
+  )
+
+p1
+
+p2 <- ggplot() +
+  tidyterra::geom_spatraster(data = ndvi_july) +
+  scale_fill_viridis_c(
+    option = "D",      # choose "D" for a good green-yellow scale
+    direction = 1,     # normal direction (low = dark, high = bright)
+    limits = c(0, 1),  # NDVI typically between 0 and 1
+    name = "NDVI",
+    na.value = "white"
+  ) +
+  theme_bw() +
+  theme(
+    legend.position = "bottom",
+    legend.key.size = unit(0.9, "cm"),
+    legend.text = element_text(size = 8),
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 12),
+    legend.title = element_text(size = 12),
+    legend.margin = margin(t = 0, r = 0, b = 0, l = 0)
+  )
+
+p3 <- ggplot() +
+  tidyterra::geom_spatraster(data = ndvi_aug) +
+  scale_fill_viridis_c(
+    option = "D",      # choose "D" for a good green-yellow scale
+    direction = 1,     # normal direction (low = dark, high = bright)
+    limits = c(0, 1),  # NDVI typically between 0 and 1
+    name = "NDVI",
+    na.value = "white"
+  ) +
+  theme_bw() +
+  theme(
+    legend.position = "bottom",
+    legend.key.size = unit(0.9, "cm"),
+    legend.text = element_text(size = 8),
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 12),
+    legend.title = element_text(size = 12),
+    legend.margin = margin(t = 0, r = 0, b = 0, l = 0)
+  )
+p4 <- ggplot() +
+  tidyterra::geom_spatraster(data = ndvi_sep) +
+  scale_fill_viridis_c(
+    option = "D",      # choose "D" for a good green-yellow scale
+    direction = 1,     # normal direction (low = dark, high = bright)
+    limits = c(0, 1),  # NDVI typically between 0 and 1
+    name = "NDVI",
+    na.value = "white"
+  ) +
+  theme_bw() +
+  theme(
+    legend.position = "bottom",
+    legend.key.size = unit(0.9, "cm"),
+    legend.text = element_text(size = 8),
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 12),
+    legend.title = element_text(size = 12),
+    legend.margin = margin(t = 0, r = 0, b = 0, l = 0)
+  )
+
+combined <- p1 + p2 + p3 + p4 + 
+  plot_layout(ncol = 2) + 
+  plot_annotation(
+    tag_levels = "a",
+     tag_prefix = "(",
+    tag_suffix = ")"
+    )
+
+ggsave("/home/yousra/Drone_drought/manuscript/ndvi_l.png", plot = combined, width = 9, height = 8, dpi =500)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+#clipping for Lens 
+
+```{r}
+
+library(terra)
+library(viridis)
+
+# Paths
+ndvi_dir <- "/home/yousra/Drone_drought/vignettes/NDVI_rasters"
+shapefile <- "/home/yousra/Drone_drought/data-raw/lens.shp"
+output_dir <- file.path(ndvi_dir, "clipped")
+if (!dir.exists(output_dir)) dir.create(output_dir)
+
+# Load polygon
+polygon <- vect(shapefile)
+
+# List raster files
+ndvi_files <- list.files(ndvi_dir, pattern = "^NDVI_\\d{8}\\.tif$", full.names = TRUE)
+
+# Loop over rasters and clip
+for (file in ndvi_files) {
+  r <- rast(file)
+  
+  # Reproject polygon if needed
+  if (!same.crs(r, polygon)) {
+    polygon <- project(polygon, crs(r))
+  }
+
+  # Clip: crop then mask
+  r_clipped <- mask(crop(r, polygon), polygon)
+
+  # Save clipped raster
+  out_file <- file.path(output_dir, paste0("clipped_", basename(file)))
+  writeRaster(r_clipped, out_file, overwrite = TRUE)
+  
+  message("Saved clipped raster: ", out_file)
+}
+
+
+```
+
+#lens
+
+```{r}
+
+ndvi_june <- terra::rast(here::here("/home/yousra/Drone_drought/vignettes/NDVI_rasters_s/clipped/clipped_NDVI_20240613.tif"))
+ndvi_july <- terra::rast(here::here("/home/yousra/Drone_drought/vignettes/NDVI_rasters_s/clipped/clipped_NDVI_20240719.tif"))
+ndvi_aug <- terra::rast(here::here("/home/yousra/Drone_drought/vignettes/NDVI_rasters_s/clipped/clipped_NDVI_20240813.tif"))
+ndvi_sep <- terra::rast(here::here("/home/yousra/Drone_drought/vignettes/NDVI_rasters_s/clipped/clipped_NDVI_20240913.tif"))
+
+library(terra)
+library(ggplot2)
+library(tidyterra)
+
+# Stack already aligned NDVI layers
+ndvi_stack <- rast(list(ndvi_june, ndvi_july, ndvi_aug, ndvi_sep))
+names(ndvi_stack) <- c("June", "July", "August", "September")
+
+# Convert to matrix for clustering (rows: pixels, cols: months)
+ndvi_matrix <- values(ndvi_stack, na.rm = TRUE)
+
+# Remove NA rows
+ndvi_matrix <- ndvi_matrix[complete.cases(ndvi_matrix), ]
+
+saveRDS(ndvi_matrix, file = "vignettes/NDVI_rasters/ndvi_matrix.rds")
+
+
+```
+
+
+```{r}
+library(terra)
+library(ggplot2)
+
+#read matrix 
+getwd()
+
+ndvi_matrix <- readRDS("/home/yousra/Drone_drought/vignettes/NDVI_rasters/ndvi_matrix.rds")
+
+
+
+# Run k-means
+set.seed(0)
+k <- 3
+kmeans_result <- kmeans(ndvi_matrix, centers = k)
+
+#read ndvi stack 
+
+ndvi_stack<- terra::rast("/home/yousra/Drone_drought/vignettes/NDVI_rasters/ndvi_stack_lens.tif")
+
+# Create a new raster of clusters
+cluster_raster <- ndvi_stack[[1]] # template
+values(cluster_raster) <- NA
+values(cluster_raster)[!is.na(values(ndvi_stack[[1]]))] <- kmeans_result$cluster
+
+ggplot() +
+  tidyterra::geom_spatraster(data = cluster_raster) +
+  scale_fill_viridis_d(name = "NDVI Cluster") +
+  theme_minimal() +
+  ggtitle("Vegetation Health Clusters (NDVI)")
+
+```
+
+```{r}
+# Extract NDVI values (removes NA rows)
+ndvi_matrix <- values(ndvi_stack)
+valid_idx <- complete.cases(ndvi_matrix)
+
+
+set.seed(0)
+# Run clustering only on valid pixels
+kmeans_result <- kmeans(ndvi_matrix[valid_idx, ], centers = 4)
+
+# Create empty cluster raster
+cluster_raster <- ndvi_stack[[1]]
+values(cluster_raster) <- NA
+
+# Fill cluster values only for valid pixels
+values(cluster_raster)[valid_idx] <- kmeans_result$cluster
+
+cluster_raster <- as.factor(cluster_raster)
+
+#install.packages("farver")
+library(farver)
+
+p <- ggplot() +
+  tidyterra::geom_spatraster(data = cluster_raster) +
+  scale_fill_viridis_d(name = "Cluster") +
+  theme_minimal() +
+  ggtitle("")
+p
+
+ndvi_june_l <- terra::rast(here::here("/home/yousra/Drone_drought/vignettes/NDVI_rasters/clipped/clipped_NDVI_20240613.tif"))
+plot(ndvi_june_l)
+
+install.packages("labeling")
+library(labeling)
+
+p1 <- ggplot() +
+  tidyterra::geom_spatraster(data = ndvi_june_l) +
+  scale_fill_viridis_c(
+    option = "D",      # choose "D" for a good green-yellow scale
+    direction = 1,     # normal direction (low = dark, high = bright)
+    limits = c(0, 1),  # NDVI typically between 0 and 1
+    name = "NDVI",
+    na.value = "white"
+  )+
+  theme_minimal()+ 
+  ggtitle("")
+p1
+
+library(patchwork)
+
+combined <- p1 + p + 
+  plot_layout(ncol = 2) + 
+  plot_annotation(
+    tag_levels = "a",
+     tag_prefix = "(",
+    tag_suffix = ")"
+    )
+
+ggsave("/home/yousra/Drone_drought/manuscript/ndvi_clusters_4.png", plot = p, width = 5, height = 4, dpi =700)
+
+
+```
+
+
+clustering for saillon
+
+```{r}
+
+ndvi_june <- terra::rast(here::here("vignettes/NDVI_rasters/clipped/clipped_NDVI_20240613.tif"))
+ndvi_july <- terra::rast(here::here("/home/yousra/Drone_drought/vignettes/NDVI_rasters_s/clipped/clipped_NDVI_20240719.tif"))
+ndvi_aug <- terra::rast(here::here("vignettes/NDVI_rasters/clipped/clipped_NDVI_20240813.tif"))
+ndvi_sep <- terra::rast(here::here("vignettes/NDVI_rasters/clipped/clipped_NDVI_20240913.tif"))
+
+# Choose one raster as reference (e.g., June)
+ref <- ndvi_june
+
+# Align others to the reference
+ndvi_july <- resample(ndvi_july, ref)
+ndvi_aug  <- resample(ndvi_aug, ref)
+ndvi_sep  <- resample(ndvi_sep, ref)
+
+library(terra)
+library(ggplot2)
+library(tidyterra)
+
+# Stack already aligned NDVI layers
+ndvi_stack <- rast(list(ndvi_june, ndvi_july, ndvi_aug, ndvi_sep))
+names(ndvi_stack) <- c("June", "July", "August", "September")
+
+# # Convert to matrix for clustering (rows: pixels, cols: months)
+# ndvi_matrix <- values(ndvi_stack, na.rm = TRUE)
+# 
+# # Remove NA rows
+# ndvi_matrix <- ndvi_matrix[complete.cases(ndvi_matrix), ]
+
+saveRDS(ndvi_matrix, file = "vignettes/NDVI_rasters/ndvi_matrix.rds")
+
+
+# Extract NDVI values (removes NA rows)
+ndvi_matrix_s <- values(ndvi_stack)
+valid_idx_s <- complete.cases(ndvi_matrix_s)
+
+library(terra)
+
+# Create a mask where all layers have valid values
+valid_mask <- app(ndvi_stack, fun = function(x) all(!is.na(x)))
+
+# Apply the mask to remove NA areas
+ndvi_clean <- mask(ndvi_stack, valid_mask)
+
+writeRaster(ndvi_clean, filename = "/home/yousra/Drone_drought/vignettes/NDVI_rasters_s/ndvi_stack_s.tif", overwrite = TRUE)
+
+saveRDS(ndvi_matrix_s, file = "/home/yousra/Drone_drought/vignettes/NDVI_rasters_s/ndvi_matrix_s.rds")
+
+
+```
+
+
+```{r}
+
+ndvi_matrix_s <- readRDS("/home/yousra/Drone_drought/vignettes/NDVI_rasters_s/ndvi_matrix_s.rds")
+
+
+#read ndvi stack 
+
+ndvi_stack<- terra::rast("/home/yousra/Drone_drought/vignettes/NDVI_rasters_s/ndvi_stack_s.tif")
+
+#only one band 
+# Extract NDVI values (removes NA rows)
+ndvi_matrix_s <- values(ndvi_july)
+valid_idx_s <- complete.cases(ndvi_matrix_s)
+
+set.seed(0)
+# Run clustering only on valid pixels
+kmeans_result <- kmeans(ndvi_matrix_s[valid_idx_s, ], centers = 4)
+
+# Create empty cluster raster
+cluster_raster <- ndvi_july
+values(cluster_raster) <- NA
+
+# Fill cluster values only for valid pixels
+values(cluster_raster)[valid_idx_s] <- kmeans_result$cluster
+
+cluster_raster <- as.factor(cluster_raster)
+
+
+#all stack 
+
+set.seed(0)
+# Run clustering only on valid pixels
+kmeans_result <- kmeans(ndvi_matrix_s[valid_idx_s, ], centers = 4)
+
+# Create empty cluster raster
+cluster_raster <- ndvi_stack[[1]]
+values(cluster_raster) <- NA
+
+# Fill cluster values only for valid pixels
+values(cluster_raster)[valid_idx] <- kmeans_result$cluster
+
+cluster_raster <- as.factor(cluster_raster)
+
+#install.packages("farver")
+library(farver)
+
+p<- ggplot() +
+  tidyterra::geom_spatraster(data = cluster_raster) +
+  scale_fill_viridis_d(name = "Cluster") +
+  theme_minimal() +
+  ggtitle("")
+p
+
+writeRaster(cluster_raster, filename = "/data_2/scratch/yousra/cluster_raster.tif", overwrite = TRUE)
+
+
+ggsave("/home/yousra/Drone_drought/manuscript/ndvi_clusters_s_4.png", plot = p, width = 5, height = 4, dpi =700)
+
+```
+
+
+Clustering based on DEM 
+
+```{r}
+library(terra)
+library(viridis)
+library(ggplot2)
+
+dem <- rast("/home/yousra/Drone_drought/data-raw/20240515_saillon_DEM.tif")
+
+# Load the shapefile as a vector object
+polygon <- vect("/home/yousra/Drone_drought/data-raw/saillon.shp")
+
+# Reproject the polygon if CRS doesn't match
+if (!identical(crs(dem), crs(polygon))) {
+  polygon <- project(polygon, crs(dem))
+}
+
+# Crop and mask
+dem_clipped <- mask(crop(dem, polygon), polygon)
+
+# Save
+writeRaster(dem_clipped, "/home/yousra/Drone_drought/data-raw/dem_clipped.tif", overwrite = TRUE)
+
+#️ Optional visualization
+plot(dem_clipped, main = "Clipped DEM")
+plot(dem_clipped, main = "Elevation (m)", col = terrain.colors(20))
+
+
+p1 <- ggplot() +
+  tidyterra::geom_spatraster(data = dem_clipped) +
+  scale_fill_viridis_c(
+    name = "Elevation (m)",
+    option = "viridis",
+    na.value = "transparent"
+  ) +
+  theme_minimal() +
+  labs(title = "")
+
+p1
+
+#retrive slope and elevation 
+
+slope <- terrain(dem_clipped, v = "slope", unit = "degrees")
+# aspect <- terrain(dem, opt = "aspect", unit = "degrees")
+plot(slope, main = "Slope (degrees)", col = viridis::viridis(20))
+
+p2 <- ggplot() +
+  tidyterra::geom_spatraster(data = slope) +
+  scale_fill_viridis_c(
+    name = "Slope (°)",
+    option = "viridis",
+    na.value = "transparent"
+  ) +
+  theme_minimal() +
+  labs(title = "")
+
+p2
+
+writeRaster(slope, "/home/yousra/Drone_drought/data-raw/slope_clipped.tif", overwrite = TRUE)
+
+library(patchwork)
+
+combined <- p1 + p2 + 
+  plot_layout(ncol = 2) + 
+  plot_annotation(
+    tag_levels = "a",
+     tag_prefix = "(",
+    tag_suffix = ")"
+    )
+
+ggsave("/home/yousra/Drone_drought/manuscript/dem_slope.png", plot = combined, width = 10, height = 5, dpi =700)
+
+
+# ndvi_matrix_s <- values(ndvi_july)
+# valid_idx_s <- complete.cases(ndvi_matrix_s)
+# 
+# set.seed(0)
+# # Run clustering only on valid pixels
+# kmeans_result <- kmeans(ndvi_matrix_s[valid_idx_s, ], centers = 3)
+# 
+# # Create empty cluster raster
+# cluster_raster <- ndvi_july
+# values(cluster_raster) <- NA
+# 
+# # Fill cluster values only for valid pixels
+# values(cluster_raster)[valid_idx_s] <- kmeans_result$cluster
+# 
+# cluster_raster <- as.factor(cluster_raster)
+
+```
+
+
+```{r}
+
+library(terra)
+
+dem <- terra::rast("/home/yousra/Drone_drought/data-raw/dem_clipped.tif")
+
+slope <- terra::rast("/home/yousra/Drone_drought/data-raw/slope_clipped.tif")
+
+# Resample slope to match DEM extent and resolution
+slope_aligned <- resample(slope, dem, method = "bilinear")
+
+topo_stack <- c(dem, slope_aligned)
+
+#lower resolution 
+
+topo_low_res <- aggregate(topo_stack, fact = 4, fun = mean, na.rm = TRUE)
+
+res(topo_low_res)
+res(topo_stack)
+
+topo_matrix <- values(topo_low_res, na.rm = TRUE)
+topo_matrix <- topo_matrix[complete.cases(topo_matrix), ]
+
+set.seed(0)
+topo_kmeans <- kmeans(topo_matrix, centers = 4)
+
+# Create a mask of complete cases across all layers
+topo_vals <- values(topo_low_res)
+valid_mask <- complete.cases(topo_vals)
+
+# Now extract valid indices
+valid_idx <- which(valid_mask)
+
+# Ensure the number of clusters matches number of valid pixels
+length(topo_kmeans$cluster) == length(valid_idx)  # should be TRUE
+
+# Create the output raster and assign values
+topo_cluster_raster <- topo_low_res[[1]]
+clust_vals <- rep(NA, ncell(topo_cluster_raster))
+clust_vals[valid_idx] <- topo_kmeans$cluster
+
+# Assign back to raster
+values(topo_cluster_raster) <- clust_vals
+
+topo_cluster_raster <- as.factor(topo_cluster_raster)
+
+p <- ggplot() +
+  tidyterra::geom_spatraster(data = topo_cluster_raster) +
+  scale_fill_viridis_d(name = "Topo Cluster",  na.value = "transparent") +
+  theme_minimal() +
+  ggtitle("")
+p
+
+writeRaster(topo_cluster_raster, "/data_2/scratch/yousra/dem_slope_clusters.tif", overwrite = TRUE)
+
+ggsave("/home/yousra/Drone_drought/manuscript/topo_clusters.png", plot = p, width = 5, height = 3, dpi =700)
+
+```
+
+

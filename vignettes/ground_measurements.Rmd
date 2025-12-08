@@ -1,0 +1,352 @@
+---
+title: "SWP"
+output: html_document
+date: "2025-06-23"
+---
+
+
+Soil water potential in many depths in one location 
+```{r}
+
+library("readxl")
+library(dplyr)
+install.packages("writexl")
+library(writexl)
+SWP_2024 <- read_xlsx("/home/yousra/Drone_drought/data-raw/ground_data/SWP_Saillon_beech_2024.xlsx")
+
+# select only 12:00
+SWP_2024_12 <- SWP_2024[grepl("12:00", SWP_2024$date), ]%>%
+    mutate(date = as.Date(date, format = "%d.%m.%Y"))
+
+SWP_2024_s <- SWP_2024_12 %>%
+  #rename(date = "TO_CHAR(M.MEAS_DATE,'DD.MM.YYY") %>%
+  mutate(date = as.Date(date, format = "%d.%m.%Y"))
+  
+SWP_2024_s <- SWP_2024_s %>%
+  pivot_longer(
+    cols = starts_with("22 Soil water potential mean"),  # Select columns to pivot
+    names_to = "name",                                  # New column for depth
+    values_to = "value"                                    # New column for SWP values
+  ) |>
+  mutate(name = case_when(
+    grepl("20 cm", name) ~ "20 cm",
+    grepl("80 cm", name) ~ "80 cm",
+    grepl("140 cm", name) ~ "140 cm",
+    grepl("200 cm", name) ~ "200 cm",
+    TRUE ~ name
+  ))
+
+SWP_2024_s$name<- as.character(SWP_2024_s$name)
+
+
+  #filter(Measure_date >= '2017-01-01') %>%
+  #filter(PROFIL_NR != '890') %>%#exclude the lens site 
+
+ 
+  #mutate(PROFIL_NR = recode(PROFIL_NR, "1569" = "Saillon_Oak" , "1570" = "Saillon_Beech"))
+
+write_xlsx(SWP_2024_s, "/home/yousra/Drone_drought/data/SWP_2024.xlsx")
+
+```
+
+
+
+```{r}
+
+SWP_2024_s$name <- factor(SWP_2024_s$name, levels = c("20 cm", "80 cm", "140 cm", "200 cm"))
+#Plot Soil Water potential
+p <- ggplot(SWP_2024_s, aes(x = date, y = value, group = name, color = name)) +
+  geom_point(size = 0.5, alpha = 0.7) +  # adjust the size and transaprency 
+  theme_bw() +
+  theme(legend.position = "right") +
+  labs(x = "", y = "Soil Water Potential (kPa)", color = "")
+
+ggsave("/home/yousra/Drone_drought/manuscript/SWP_24.png", plot = p, width = 5, height = 3, dpi =700)
+
+```
+
+Visualization of SWP of each soil depth and the 2 measurement points at Saillon 
+Plot for Oak trees 
+
+```{r}
+# #vizualisation of the  daily SWP Mesurements 
+# library("ggplot2")
+# #subset Data 
+# SWP_2013_Saillon_Oak <- subset(SWP_2013_Saillon, PROFIL_NR == "Saillon_Oak")
+# SWP_2013_Saillon_Beech <- subset(SWP_2013_Saillon, PROFIL_NR == "Saillon_Beech")
+# 
+# #Check data 
+# max(SWP_2013_Saillon_Oak$VALUE)
+# min(SWP_2013_Saillon_Oak$VALUE)
+# 
+# # Replace -999999 with NA in VALUE
+# SWP_2013_Saillon_Oak $VALUE<- ifelse(SWP_2013_Saillon_Oak$VALUE == -9999999, NA,SWP_2013_Saillon_Oak$VALUE)
+# 
+# #Plot Soil Water potential
+# p1 <- ggplot(SWP_2013_Saillon_Oak, aes(x = Measure_date, y = VALUE, group = NAME, color = NAME)) +
+#   geom_point(size = 0.5, alpha = 0.7) +  # adjust the size and transaprency 
+#   theme_bw() +
+#   theme(legend.position = "right") +
+#   labs(x = "", y = "Soil Water Potential (kPa)", color = "")
+# 
+# # Customize the colors of points
+# p1 <- p1 + scale_color_manual(values = c("20 cm" = "red", "80 cm" = "blue", "140 cm" = "darkgreen", "200 cm" = "gray"))
+# 
+# # Display the plot
+# print(p1)
+
+#Save the plot 
+#ggsave("../manuscript/Soil water potential-Oak.png", p1, width = 8, height = 6)
+
+```
+
+TWD plots
+
+```{r}
+
+#trees: 1094,1095,1096,1098,1099,1100,1101,1102,1103,1105,1106,1107,1112,1113,1114,1115,1116
+TWD_2024_s <- read_xlsx("/home/yousra/Drone_drought/data-raw/ground_data/Saillon_trees_tn_timeseries.xlsx")
+TWD_2024_l <-  read_xlsx("/home/yousra/Drone_drought/data-raw/ground_data/Lens_trees_tn_timeseries_696,697_LM_2024-01-01_2024-12-31.xlsx")
+
+# select only 12:00
+TWD_2024_12 <- TWD_2024[grepl("12:00", TWD_2024$ts), ]%>%
+    mutate(ts = as.Date(ts, format = "%d.%m.%Y"))
+
+TWD_2024_s <- TWD_2024_12 %>%
+  rename(date = "ts") %>%
+  mutate(date = as.Date(date, format = "%d.%m.%Y"))|>
+  rename(profil_nr = "series_id")
+
+
+TWD_2024_s$profil_nr<- as.character(TWD_2024_s$profil_nr)
+
+TWD_2024_s <- TWD_2024_s %>%
+  group_by(species) %>%
+  mutate(species_renamed = paste(species, row_number())) %>%
+  ungroup()
+
+p1 <- ggplot(TWD_2024_s, aes(x = date, y = twd, group = profil_nr, color = profil_nr)) +
+  geom_point(size = 0.5, alpha = 0.7) +  # adjust the size and transaprency 
+  theme_bw() +
+  theme(legend.position = "right", 
+        legend.key.size = unit(5, "points")) +
+  labs(x = "", y = "Tree water deficit", color = "")
+
+write_xlsx(TWD_2024_s, "/home/yousra/Drone_drought/data/TWD_2024.xlsx")
+
+
+ggsave("/home/yousra/Drone_drought/manuscript/TWD_24.png", plot = p1, width = 5, height = 3, dpi =700)
+
+```
+normalization of tree water deficit
+calculation of maximum daily shrinkage (MDS)
+MDS = predawn maximum stem radius - midday minimum stem radius
+predawn period = 03:00 to 05:00
+midday period = 11:00 to 15:00
+
+
+
+```{r}
+#calculate MDS 
+
+
+library(dplyr)
+library(lubridate)
+
+mds_tree_day <- function(data) {
+  data %>%
+    mutate(
+      date = as.Date(ts),
+      hour = hour(ts)
+    ) %>%
+    group_by(series_id, date) %>%
+    summarise(
+      predawn_max = if (any(hour >= 3 & hour < 6)) {
+        max(value[hour >= 3 & hour < 6], na.rm = TRUE)
+      } else {
+        NA_real_
+      },
+      midday_min = if (any(hour >= 11 & hour < 15)) {
+        min(value[hour >= 11 & hour < 15], na.rm = TRUE)
+      } else {
+        NA_real_
+      },
+      MDS = predawn_max - midday_min,
+      .groups = "drop"
+    )
+}
+
+
+
+```
+
+
+```{r}
+
+
+# combine saillon and lens twd datasets 
+twd <- rbind(TWD_2024, TWD_2024_l)
+
+unique(twd$series_id)
+
+species <-  c(
+  "1094" = "Fagus1",
+  "1095" = "Fagus2",
+  "1096" = "Fagus3",
+  "1098" = "Fagus4",
+  
+  "1099" = "Quercus1",
+  "1100" = "Quercus2",
+  "1101" = "Quercus3",
+  "1102" = "Quercus4",
+   "1103" = "Quercus5",
+  "1105" = "Quercus6",
+   "1106" = "Quercus7",
+  "1107" = "Quercus8",
+  
+  "1112" = "Fagus5",
+  "1113" = "Fagus6",
+  "1114" = "Fagus7",
+  "1115" = "Fagus8",
+  "1116" = "Fagus9",
+  "696"   = "Pinus1",
+  "697"   = "Pinus2"
+)
+
+#rename species_id 
+twd$series_id <- species[as.character(twd$series_id)]
+
+
+#calculate mds 
+mds <- mds_tree_day(twd)|>
+  as.data.frame()
+head(mds)
+
+mds$series_id <- as.factor(mds$series_id)
+
+
+class(mds)
+
+mds$species <- sub("[0-9]+$", "", mds$series_id)
+
+```
+
+plot MDS results 
+
+```{r}
+p2 <- ggplot(mds, aes(x = date, y = MDS, group = series_id, color = species)) +
+  geom_point(size = 0.5, alpha = 0.7) +  # adjust the size and transaprency 
+  theme_bw() +
+  theme(legend.position = "right", 
+        legend.key.size = unit(5, "points"))+
+  labs(x = "", y = "Maximum daily shrinkage (µm)", color = "")+
+    scale_color_manual(values = c(
+    "Fagus" = "forestgreen",
+    "Quercus" = "darkorange",
+    "Pinus" = "steelblue"
+  )
+)
+
+p2
+
+library(viridis)  
+library(RColorBrewer)
+
+num_colors <- length(unique(mds$series_id))
+palette <- colorRampPalette(brewer.pal(12, "Paired"))(num_colors)
+
+p2 <- ggplot(mds, aes(x = date, y = MDS, group = series_id, color = series_id)) +
+  geom_point(size = 0.5, alpha = 0.7) +
+  scale_color_viridis_d()+
+  theme_bw() +
+  theme(
+    legend.position = "right",
+    legend.key.size = unit(5, "points")
+  ) +
+  labs(
+    x = "",
+    y = "Maximum daily shrinkage (µm)", color = "" )
+
+p2
+
+ggsave("/home/yousra/Drone_drought/manuscript/mds_sp.png", plot = p2, width = 5, height = 3, dpi =700)
+
+
+```
+
+
+MDS max 
+
+
+```{r}
+install.packages("remotes")
+remotes::install_github("treenet/treenetproc")
+
+TWD_2024$ts <- format(TWD_2024$ts, format = "%Y-%m-%d %H:%M:%S")
+
+TWD_2024 <- TWD_2024 %>%
+  rename(series = series_id)
+
+TWD_2024_proc <- TWD_2024 %>%
+  select(ts, series, value) %>%
+  mutate(
+    ts = as.character(ts)  
+  )
+
+
+TWD_2024_proc <- TWD_2024_proc %>%
+  mutate(series = as.character(series))
+
+data1 <- proc_L1(
+  data_L0 = TWD_2024_proc,
+  reso = 10,
+  input = "long",
+  date_format = "%Y-%m-%d %H:%M:%S",
+  year = "asis",
+  tz = "UTC"
+)
+
+
+```
+
+
+```{r}
+
+data2<- proc_dendro_L2(
+  data1,
+  temp_L1 = NULL,
+  tol_out = 10,
+  tol_jump = 50,
+  lowtemp = 5,
+  frost_thr = 5,
+  interpol = NULL,
+  frag_len = NULL,
+  plot = TRUE,
+  plot_period = "full",
+  plot_show = "all",
+  plot_export = TRUE,
+  plot_name = "proc_L2_plot",
+  iter_clean = 1,
+  tz = "UTC"
+)
+
+
+data3 <- phase_stats(
+  data2,
+  phase_wnd = 8,
+  plot_phase = FALSE,
+  plot_export = TRUE,
+  agg_daily = TRUE,
+  tz = "UTC"
+)
+
+stats <-  phase_stats(
+ TWD_2024,
+  phase_wnd = 8,
+  plot_phase = FALSE,
+  plot_export = TRUE,
+  agg_daily = TRUE,
+  tz = "UTC"
+)
+
+```

@@ -1,0 +1,110 @@
+---
+title: "NDVI~topo"
+output: html_document
+date: "2025-05-21"
+---
+
+```{r}
+#calculate thermal index 
+
+compute_cwsi_for_dates <- function(tif_folder, target_dates, 
+                                   shapefile = NULL,
+                                   save_outputs = TRUE, 
+                                   output_dir = "cwsi_outputs") {
+  library(terra)
+  library(stringr)
+  library(lubridate)
+
+  target_dates <- as.Date(target_dates)
+
+  tif_files <- list.files(tif_folder, pattern = "_Ortho\\.tif$", 
+                          full.names = TRUE, recursive = TRUE)
+
+  if (save_outputs && !dir.exists(output_dir)) {
+    dir.create(output_dir, recursive = TRUE)
+  }
+
+  # 🔹 Load shapefile if provided
+  if (!is.null(shapefile)) {
+    roi <- vect(shapefile)
+  }
+
+  cwsi_outputs <- list()
+
+  for (tif_path in tif_files) {
+    filename <- basename(tif_path)
+    date_str <- str_extract(filename, "\\d{8}")
+    date_fmt <- as.Date(date_str, format = "%Y%m%d")
+
+    if (!date_fmt %in% target_dates) next
+
+    r <- rast(tif_path)
+    if (nlyr(r) != 7) {
+      message("Skipping (wrong band count): ", filename)
+      next
+    }
+
+    names(r) <- c("B", "G", "R", "RE", "NIR", "TIR", "alpha")
+    tir <- r[["TIR"]]
+
+    # 🔹 Clip with shapefile
+    if (!is.null(shapefile)) {
+      if (!identical(crs(tir), crs(roi))) {
+        roi <- project(roi, crs(tir))
+      }
+      tir <- mask(crop(tir, roi), roi)
+    }
+
+    # Compute T_min and T_max from clipped TIR
+    tir_vals <- values(tir, na.rm = TRUE)
+    t_min <- quantile(tir_vals, probs = 0.02, na.rm = TRUE)
+    t_max <- quantile(tir_vals, probs = 0.98, na.rm = TRUE)
+
+    #  CWSI
+    cwsi <- (tir - t_min) / (t_max - t_min)
+    cwsi <- clamp(cwsi, lower = 0, upper = 1)
+    names(cwsi) <- paste0("CWSI_", format(date_fmt, "%Y%m%d"))
+
+    # Save
+    if (save_outputs) {
+      cwsi_out <- file.path(output_dir, paste0("CWSI_", date_str, ".tif"))
+      tir_out  <- file.path(output_dir, paste0("TIR_", date_str, ".tif"))
+      writeRaster(cwsi, cwsi_out, overwrite = TRUE)
+      writeRaster(tir, tir_out, overwrite = TRUE)
+    }
+
+    cwsi_outputs[[as.character(date_fmt)]] <- cwsi
+    message("Processed CWSI for date: ", date_fmt, 
+            " (Tmin=", round(t_min, 2), ", Tmax=", round(t_max, 2), ")")
+  }
+
+  return(cwsi_outputs)
+}
+
+
+
+```
+
+```{r}
+
+ndvi_dir <- terra::rast("/data_1/saillon_24/metashape-projects/2024")
+
+cwsi_result <- compute_cwsi_for_dates(
+  tif_folder = "/data_1/saillon_24/metashape-projects/2024",
+  target_dates = c("2024-06-13", "2024-07-19", "2024-08-13", "2024-09-13"),
+  save_outputs = TRUE,
+  output_dir = "/data_2/scratch/yousra/"
+)
+
+
+cwsi <- terra::rast("/data_2/scratch/yousra/TIR_20240913.tif")
+
+
+p <- ggplot() +
+  tidyterra::geom_spatraster(data = cwsi) +
+  scale_fill_viridis_c(name = "cwsi") +
+  theme_minimal() +
+  ggtitle("")
+p
+
+```

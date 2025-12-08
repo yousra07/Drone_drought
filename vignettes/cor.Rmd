@@ -1,0 +1,618 @@
+---
+title: "ndvi_topo"
+output: html_document
+date: "2025-05-21"
+---
+
+```{r}
+
+library(terra)
+library(dplyr)
+library(ggplot2)
+
+# Load rasters
+ndvi_rast <- rast("/home/yousra/Drone_drought/vignettes/NDVI_rasters_s/clipped/clipped_NDVI_20240813.tif")
+dem_rast <- rast("/home/yousra/Drone_drought/data-raw/dem_clipped.tif")
+slope_rast <- rast("/home/yousra/Drone_drought/data-raw/slope_clipped.tif")
+
+ndvi_resampled <- resample(ndvi_rast, dem_rast, method = "bilinear")
+
+# Stack them
+topo_stack <- c(ndvi_resampled, dem_rast, slope_rast)
+names(topo_stack) <- c("NDVI", "Elevation", "slope")
+
+# Extract values as a data frame
+df <- as.data.frame(topo_stack, xy = FALSE, na.rm = TRUE)
+
+df <- df %>%
+  filter(!is.na(NDVI) & !is.na(Elevation) & !is.na(slope))
+
+head(df)
+
+p2 <- ggplot(df, aes(x = Elevation, y = NDVI)) +
+  stat_density_2d(aes(fill = ..density..), geom = "raster", contour = FALSE) +
+  scale_fill_viridis_c(name = "Density") +
+  geom_vline(xintercept = quantile(df$Elevation, probs = c(0.25, 0.75)), linetype = "dashed", color = "gray") +
+  geom_hline(yintercept = mean(df$NDVI), linetype = "dashed", color = "gray") +
+  theme_minimal() +
+  ggtitle("NDVI vs Elevation") +
+  xlab("Elevation (m)") + ylab("NDVI")
+p2
+
+set.seed(123)
+df_sample <- df[sample(nrow(df), 1000000), ]
+
+# Plot
+p2 <- ggplot(df_sample, aes(x = Elevation, y = NDVI)) +
+  stat_density_2d(aes(fill = after_stat(density)), geom = "raster", contour = FALSE) +
+  scale_fill_viridis_c(name = "Density") +
+  geom_vline(xintercept = quantile(df_sample$Elevation, probs = c(0.25, 0.75)), linetype = "dashed", color = "gray") +
+  geom_hline(yintercept = mean(df_sample$NDVI), linetype = "dashed", color = "gray") +
+  theme_minimal() +
+  xlab("Elevation (m)") + ylab("NDVI")
+
+print(p2)
+
+```
+
+
+Zonal statistics
+
+```{r}
+library(terra)
+
+# Load NDVI raster (could be a single raster or a stack)
+
+ndvi_june <- terra::rast("/home/yousra/Drone_drought/vignettes/NDVI_rasters_s/clipped/clipped_NDVI_20240613.tif")
+ndvi_july <- terra::rast("/home/yousra/Drone_drought/vignettes/NDVI_rasters_s/clipped/clipped_NDVI_20240719.tif")
+ndvi_aug <- terra::rast("/home/yousra/Drone_drought/vignettes/NDVI_rasters_s/clipped/clipped_NDVI_20240813.tif")
+ndvi_sep <- terra::rast("/home/yousra/Drone_drought/vignettes/NDVI_rasters_s/clipped/clipped_NDVI_20240913.tif")
+
+# 'fact = 4' means each new cell covers 4x4 = 16 old cells
+fact_val <- 4
+ndvi_june <- aggregate(ndvi_june, fact = fact_val, fun = mean, na.rm = TRUE)
+ndvi_july <- aggregate(ndvi_july, fact = fact_val, fun = mean, na.rm = TRUE)
+ndvi_aug  <- aggregate(ndvi_aug,  fact = fact_val, fun = mean, na.rm = TRUE)
+ndvi_sep  <- aggregate(ndvi_sep,  fact = fact_val, fun = mean, na.rm = TRUE)
+
+
+#topo_low_res <- aggregate(topo_stack, fact = 4, fun = mean, na.rm = TRUE)
+
+
+# Set the June raster as reference
+ref <- ndvi_june
+
+# Resample the others to match
+ndvi_july <- resample(ndvi_july, ref, method = "bilinear")
+ndvi_aug  <- resample(ndvi_aug,  ref, method = "bilinear")
+ndvi_sep  <- resample(ndvi_sep,  ref, method = "bilinear")
+
+ndvi_stack <- rast(list(ndvi_june, ndvi_july, ndvi_aug, ndvi_sep))
+names(ndvi_stack) <- c("June", "July", "August", "September")
+
+
+clusters <- rast("/data_2/scratch/yousra/dem_slope_clusters.tif")  # your raster with 4 classes (1–4)
+
+# Make sure both rasters align
+ndvi_rast <- resample(ndvi_aug, clusters, method = "bilinear")
+
+# Option 1: Mean NDVI per cluster (across time if it's a stack)
+zonal_mean <- zonal(ndvi_rast, clusters, fun = "mean", na.rm = TRUE)
+print(zonal_mean)
+
+writeRaster(ndvi_july, "/data_2/scratch/yousra/ndvi_july_res_s.tif", overwrite = TRUE)
+writeRaster(ndvi_aug, "/data_2/scratch/yousra/ndvi_aug_res_s.tif", overwrite = TRUE)
+writeRaster(ndvi_sep, "/data_2/scratch/yousra/ndvi_sep_res_s.tif", overwrite = TRUE)
+writeRaster(ndvi_june, "/data_2/scratch/yousra/ndvi_june_res_s.tif", overwrite = TRUE)
+
+
+```
+
+plot
+
+```{r}
+library(ggplot2)
+
+# Use nearest-neighbor resampling (appropriate for categorical data like clusters)
+clusters_resampled <- resample(clusters, ndvi_june, method = "near")
+
+ndvi_rast <- ndvi_stack
+
+# Convert to dataframe
+df <- as.data.frame(c(ndvi_rast, clusters_resampled), xy = FALSE, na.rm = TRUE)
+names(df) <- c("NDVI_June", "NDVI_July", "NDVI_Aug", "NDVI_Sep", "Cluster")
+df$Cluster <- as.factor(df$Cluster)
+
+# Melt if needed
+library(tidyr)
+df_long <- pivot_longer(df, cols = starts_with("NDVI"), names_to = "Month", values_to = "NDVI")
+
+# Boxplot
+p <- ggplot(df_long, aes(x = Cluster, y = NDVI, fill = Month)) +
+  geom_boxplot() +
+  geom_boxplot(outlier.shape = NA) +
+  coord_cartesian(ylim = c(0.6, 1)) +
+  theme_minimal() +
+  ggtitle("") +
+  ylab("NDVI") + xlab("Topographic Cluster")
+
+p
+
+ggsave("/home/yousra/Drone_drought/manuscript/zonal_stat_saillon.png", plot = p, width = 5, height = 3, dpi =700)
+
+
+ggplot(df_long, aes(x = NDVI, fill = Month)) +
+  geom_density(alpha = 0.6) +
+  facet_wrap(~ Cluster, scales = "free_y") +
+  theme_minimal() +
+  ggtitle("") +
+  xlab("NDVI") + ylab("Density")
+```
+
+Clustering date per date 
+
+```{r}
+
+ndvi_june <- terra::rast("/data_2/scratch/yousra/ndvi_june_res_s.tif")
+ndvi_july <- terra::rast("/data_2/scratch/yousra/ndvi_july_res_s.tif")
+ndvi_aug <- terra::rast("/data_2/scratch/yousra/ndvi_aug_res_s.tif")
+ndvi_sep <- terra::rast("/data_2/scratch/yousra/ndvi_sep_res_s.tif")
+
+
+# Choose one raster as reference (e.g., June)
+ref <- ndvi_june
+
+# Align others to the reference
+ndvi_july <- resample(ndvi_july, ref)
+ndvi_aug  <- resample(ndvi_aug, ref)
+ndvi_sep  <- resample(ndvi_sep, ref)
+
+library(terra)
+library(ggplot2)
+library(tidyterra)
+
+library(terra)
+library(ggplot2)
+
+#read matrix 
+getwd()
+
+# Stack already aligned NDVI layers
+ndvi_stack <- rast(list(ndvi_june, ndvi_july, ndvi_aug, ndvi_sep))
+names(ndvi_stack) <- c("June", "July", "August", "September")
+
+library(terra)
+library(ggplot2)
+library(tidyterra)
+library(viridis)
+
+# Load NDVI rasters
+ndvi_list <- list(
+  June = terra::rast("/data_2/scratch/yousra/ndvi_june_res_s.tif"),
+  July = terra::rast("/data_2/scratch/yousra/ndvi_july_res_s.tif"),
+  August = terra::rast("/data_2/scratch/yousra/ndvi_aug_res_s.tif"),
+  September = terra::rast("/data_2/scratch/yousra/ndvi_sep_res_s.tif")
+)
+
+# Clustering function
+cluster_ndvi <- function(r, k = 4) {
+  ndvi_values <- values(r)
+  valid_idx <- complete.cases(ndvi_values)
+  
+  # Run k-means clustering on valid NDVI pixels
+  set.seed(0)
+  km_result <- kmeans(ndvi_values[valid_idx], centers = k)
+  
+  # Create empty cluster raster and fill cluster labels
+  cluster_r <- r
+  values(cluster_r) <- NA
+  values(cluster_r)[valid_idx] <- km_result$cluster
+  
+  return(as.factor(cluster_r))
+}
+
+# Apply clustering to each raster
+clustered_ndvi <- lapply(ndvi_list, cluster_ndvi, k = 4)
+
+# Plot each clustered NDVI
+plot_list <- lapply(names(clustered_ndvi), function(name) {
+  ggplot() +
+    tidyterra::geom_spatraster(data = clustered_ndvi[[name]]) +
+    scale_fill_viridis_d(name = paste("Cluster -", name)) +
+    theme_minimal() +
+    ggtitle(paste("NDVI Clusters -", name))
+})
+
+# Display one plot (e.g., July)
+print(plot_list[["July"]])
+
+# To show all plots (optionally)
+# library(patchwork)
+# wrap_plots(plot_list)
+
+
+
+
+```
+
+
+```{r}
+
+library(terra)
+library(ggplot2)
+library(tidyterra)
+library(viridis)
+
+# Load NDVI rasters
+ndvi_list <- list(
+  June = terra::rast("/data_2/scratch/yousra/ndvi_june_res_s.tif"),
+  July = terra::rast("/data_2/scratch/yousra/ndvi_july_res_s.tif"),
+  August = terra::rast("/data_2/scratch/yousra/ndvi_aug_res_s.tif"),
+  September = terra::rast("/data_2/scratch/yousra/ndvi_sep_res_s.tif")
+)
+
+# Clustering function
+cluster_ndvi <- function(r, k = 3) {
+  ndvi_values <- values(r)
+  valid_idx <- complete.cases(ndvi_values)
+  
+  # Run k-means clustering on valid NDVI pixels
+  set.seed(0)
+  km_result <- kmeans(ndvi_values[valid_idx], centers = k)
+  
+  # Create empty cluster raster and fill cluster labels
+  cluster_r <- r
+  values(cluster_r) <- NA
+  values(cluster_r)[valid_idx] <- km_result$cluster
+  
+  return(as.factor(cluster_r))
+}
+
+# Apply clustering to each raster
+clustered_ndvi <- lapply(ndvi_list, cluster_ndvi, k = 3)
+
+# Plot each clustered NDVI
+plot_list <- lapply(names(clustered_ndvi), function(name) {
+  ggplot() +
+    tidyterra::geom_spatraster(data = clustered_ndvi[[name]]) +
+    scale_fill_viridis_d(name = paste("Cluster -", name)) +
+    theme_minimal() +
+    ggtitle(paste("NDVI Clusters -", name))
+})
+
+# Display one plot (e.g., July)
+print(plot_list[["July"]])
+
+# To show all plots (optionally)
+# library(patchwork)
+# wrap_plots(plot_list)
+library(terra)
+library(ggplot2)
+library(tidyterra)
+library(viridis)
+
+# Load NDVI rasters
+ndvi_list <- list(
+  June = terra::rast("/data_2/scratch/yousra/ndvi_june_res_s.tif"),
+  July = terra::rast("/data_2/scratch/yousra/ndvi_july_res_s.tif"),
+  August = terra::rast("/data_2/scratch/yousra/ndvi_aug_res_s.tif"),
+  September = terra::rast("/data_2/scratch/yousra/ndvi_sep_res_s.tif")
+)
+
+# Clustering function
+cluster_ndvi <- function(r, k = 4) {
+  ndvi_values <- values(r)
+  valid_idx <- complete.cases(ndvi_values)
+  
+  # Run k-means clustering on valid NDVI pixels
+  set.seed(0)
+  km_result <- kmeans(ndvi_values[valid_idx], centers = k)
+  
+  # Create empty cluster raster and fill cluster labels
+  cluster_r <- r
+  values(cluster_r) <- NA
+  values(cluster_r)[valid_idx] <- km_result$cluster
+  
+  return(as.factor(cluster_r))
+}
+
+# Apply clustering to each raster
+clustered_ndvi <- lapply(ndvi_list, cluster_ndvi, k = 4)
+
+# Plot each clustered NDVI
+plot_list <- lapply(names(clustered_ndvi), function(name) {
+  ggplot() +
+    tidyterra::geom_spatraster(data = clustered_ndvi[[name]]) +
+    scale_fill_viridis_d(name = paste("Cluster -", name)) +
+    theme_minimal() +
+    ggtitle(paste("NDVI Clusters -", name))
+})
+
+# Display one plot (e.g., July)
+
+print(plot_list[["July"]])
+
+plot_list[["July"]]
+
+str(plot_list[["July"]])
+
+# To show all plots (optionally)
+# library(patchwork)
+# wrap_plots(plot_list)
+
+names(clustered_ndvi)
+
+plot_list <- lapply(names(clustered_ndvi), function(name) {
+  p <- ggplot() +
+    tidyterra::geom_spatraster(data = clustered_ndvi[[name]]) +
+    scale_fill_viridis_d(name = paste("Cluster", name)) +
+    theme_minimal() +
+    ggtitle(paste("NDVI Clusters -", name))
+  return(p)
+})
+names(plot_list) <- names(clustered_ndvi)  # Ensure names carry over
+
+# Load patchwork
+library(patchwork)
+
+# Combine and display in 2x2 grid
+(plot_list[["June"]] | plot_list[["July"]]) /
+(plot_list[["August"]] | plot_list[["September"]])
+
+
+```
+
+```{r}
+# 3. Stack aligned rasters
+ndvi_stack <- rast(list(ndvi_june, ndvi_july, ndvi_aug, ndvi_sep))
+names(ndvi_stack) <- c("June", "July", "August", "September")
+
+# 4. Mask out NA (keep only pixels valid in all 4 months)
+valid_mask <- app(ndvi_stack, fun = function(x) all(!is.na(x)))
+ndvi_clean <- mask(ndvi_stack, valid_mask)
+
+# 5. Extract matrix for clustering
+ndvi_matrix <- values(ndvi_clean)
+valid_idx <- complete.cases(ndvi_matrix)
+
+# Optional: Save for reuse
+saveRDS(ndvi_matrix, file = "vignettes/NDVI_rasters/ndvi_matrix.rds")
+
+# 6. K-means clustering on all months (4-D vector per pixel)
+set.seed(0)
+kmeans_result <- kmeans(ndvi_matrix[valid_idx, ], centers = 4)
+
+# 7. Create cluster raster
+cluster_raster <- ndvi_stack[[1]]  # any layer works
+values(cluster_raster) <- NA
+values(cluster_raster)[valid_idx] <- kmeans_result$cluster
+cluster_raster <- as.factor(cluster_raster)
+
+levels(cluster_raster) <- data.frame(ID = 1:4,
+                                     Cluster = c("Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4"))
+
+
+# 8. Plot clusters
+ggplot() +
+  geom_spatraster(data = cluster_raster[[2]]) +
+  scale_fill_viridis_d(name = "NDVI Cluster") +
+  theme_minimal() +
+  ggtitle("NDVI Temporal Clustering (June)")
+
+
+
+```
+
+
+```{r}
+ndvi_stack_s <- resample(ndvi_stack, cluster_raster, method = "bilinear")
+# Extract NDVI values for all months
+ndvi_vals <- values(ndvi_stack)
+
+# Extract cluster values
+cluster_vals <- values(cluster_raster)
+
+# Keep only valid data (non-NA across time and clusters)
+valid <- complete.cases(ndvi_vals) & !is.na(cluster_vals)
+
+# Create a dataframe with all needed info
+ndvi_df <- as.data.frame(ndvi_vals[valid, ])
+ndvi_df$Cluster <- factor(cluster_vals[valid], 
+                          levels = 1:4,
+                          labels = c("Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4"))
+
+# Pivot to long format for ggplot boxplots
+ndvi_long <- pivot_longer(ndvi_df, 
+                          cols = c("June", "July", "August", "September"),
+                          names_to = "Month",
+                          values_to = "NDVI")
+
+# Plot: Boxplots of NDVI per cluster per month
+ggplot(ndvi_long, aes(x = Cluster, y = NDVI, fill = Month)) +
+  geom_boxplot(outlier.size = 0.5) +
+  # facet_wrap(~Month, ncol = 2) +
+  scale_fill_viridis_d() +
+  theme_minimal() +
+  labs(title = "NDVI Distribution by Cluster and Month",
+       y = "NDVI",
+       x = "NDVI Cluster") +
+  theme(legend.position = "Month")
+
+ndvi_long$Month <- factor(ndvi_long$Month,
+                          levels = c("June", "July", "August", "September"))
+
+p <- ggplot(ndvi_long, aes(x = Cluster, y = NDVI, fill = Month)) +
+  geom_boxplot(outlier.size = 0.5) +
+  coord_cartesian(ylim = c(0, 1)) +
+  theme_minimal() +
+  ggtitle("") +
+  ylab("NDVI") + xlab("NDVI Cluster")
+
+p
+
+ggsave("/home/yousra/Drone_drought/manuscript/zonal_stat_ndvi_cluster.png", plot = p, width = 5, height = 3, dpi =700)
+
+```
+
+
+```{r}
+cluster_raster <- terra::rast("/data_2/scratch/yousra/cluster_raster.tif")
+
+# Load NDVI raster (could be a single raster or a stack)
+
+ndvi_june <- terra::rast("/home/yousra/Drone_drought/vignettes/NDVI_rasters_s/clipped/clipped_NDVI_20240613.tif")
+ndvi_july <- terra::rast("/home/yousra/Drone_drought/vignettes/NDVI_rasters_s/clipped/clipped_NDVI_20240719.tif")
+ndvi_aug <- terra::rast("/home/yousra/Drone_drought/vignettes/NDVI_rasters_s/clipped/clipped_NDVI_20240813.tif")
+ndvi_sep <- terra::rast("/home/yousra/Drone_drought/vignettes/NDVI_rasters_s/clipped/clipped_NDVI_20240913.tif")
+
+
+# Set the June raster as reference
+ref <- ndvi_june
+
+# Resample the others to match
+ndvi_july <- resample(ndvi_july, ref, method = "bilinear")
+ndvi_aug  <- resample(ndvi_aug,  ref, method = "bilinear")
+ndvi_sep  <- resample(ndvi_sep,  ref, method = "bilinear")
+
+ndvi_stack <- rast(list(ndvi_june, ndvi_july, ndvi_aug, ndvi_sep))
+names(ndvi_stack) <- c("June", "July", "August", "September")
+
+
+# Use nearest-neighbor resampling (appropriate for categorical data like clusters)
+cluster_raster <- resample(cluster_raster, ndvi_june, method = "near")
+
+ndvi_rast <- ndvi_stack
+
+# Convert to dataframe
+df <- as.data.frame(c(ndvi_rast, cluster_raster), xy = FALSE, na.rm = TRUE)
+names(df) <- c("NDVI_June", "NDVI_July", "NDVI_Aug", "NDVI_Sep", "Cluster")
+df$Cluster <- as.factor(df$Cluster)
+
+# Melt if needed
+library(tidyr)
+df_long <- pivot_longer(df, cols = starts_with("NDVI"), names_to = "Month", values_to = "NDVI")
+
+df_long$Month <- factor(df_long$Month,
+                          levels = c("June", "July", "August", "September"))
+
+# Boxplot
+p <- ggplot(df_long, aes(x = Cluster, y = NDVI, fill = Month)) +
+  geom_boxplot() +
+  geom_boxplot(outlier.shape = NA) +
+  coord_cartesian(ylim = c(0.6, 1)) +
+  theme_minimal() +
+  ggtitle("") +
+  ylab("NDVI") + xlab("Topographic Cluster")
+
+p
+
+```
+
+zonal stats using date per date 
+
+```{r}
+
+library(terra)
+library(ggplot2)
+cluster_raster <- terra::rast("/data_2/scratch/yousra/cluster_raster.tif")
+
+levels(cluster_raster) <- data.frame(ID = 1:4,
+                                     Cluster = c("Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4"))
+
+
+# 8. Plot clusters
+ggplot() +
+  geom_spatraster(data = cluster_raster) +
+  scale_fill_viridis_d(name = "NDVI Cluster") +
+  theme_minimal() +
+  ggtitle("NDVI Clustering")
+
+# Load NDVI raster (could be a single raster or a stack)
+
+ndvi_june <- terra::rast("/home/yousra/Drone_drought/vignettes/NDVI_rasters_s/clipped/clipped_NDVI_20240613.tif")
+ndvi_july <- terra::rast("/home/yousra/Drone_drought/vignettes/NDVI_rasters_s/clipped/clipped_NDVI_20240719.tif")
+ndvi_aug <- terra::rast("/home/yousra/Drone_drought/vignettes/NDVI_rasters_s/clipped/clipped_NDVI_20240813.tif")
+ndvi_sep <- terra::rast("/home/yousra/Drone_drought/vignettes/NDVI_rasters_s/clipped/clipped_NDVI_20240913.tif")
+
+
+# Set the June raster as reference
+ref <- ndvi_june
+
+# Resample the others to match
+ndvi_july <- resample(ndvi_july, ref, method = "bilinear")
+ndvi_aug  <- resample(ndvi_aug,  ref, method = "bilinear")
+ndvi_sep  <- resample(ndvi_sep,  ref, method = "bilinear")
+
+ndvi_stack <- rast(list(ndvi_june, ndvi_july, ndvi_aug, ndvi_sep))
+names(ndvi_stack) <- c("June", "July", "August", "September")
+
+names(ndvi_july) <- c("July")
+
+# Use nearest-neighbor resampling (appropriate for categorical data like clusters)
+cluster_raster <- resample(cluster_raster, ndvi_july, method = "near")
+
+ndvi_rast <- ndvi_stack 
+
+# Convert to dataframe
+df <- as.data.frame(c(ndvi_july, cluster_raster), xy = FALSE, na.rm = TRUE)
+names(df) <- c( "NDVI_July", "Cluster")
+df$Cluster <- as.factor(df$Cluster)
+
+# Melt if needed
+library(tidyr)
+df_long <- pivot_longer(df, cols = starts_with("NDVI"), names_to = "Month", values_to = "NDVI")
+
+#df_long$Month <- factor(df_long$Month,
+                          # levels = c("June", "July", "August", "September"))
+
+
+df_long$Cluster <- factor(df_long$Cluster, 
+                          levels = 1:4,
+                          labels = c("Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4"))
+
+#names(df_long$Cluster)
+
+# Boxplot
+# p <- ggplot(df_long, aes(x = Cluster, y = NDVI, fill = Month)) +
+#   geom_boxplot() +
+#   geom_boxplot(outlier.shape = NA) +
+#   coord_cartesian(ylim = c(0.6, 1)) +
+#   theme_minimal() +
+#   ggtitle("") +
+#   ylab("NDVI") + xlab("Topographic Cluster")
+# 
+# p
+
+p <- ggplot(df_long, aes(x = Cluster, y = NDVI, fill = Cluster)) +
+  geom_boxplot(outlier.size = 0.5) +
+  scale_fill_viridis_d(name = "Cluster")+
+  coord_cartesian(ylim = c(0, 1)) +
+  theme_minimal() +
+  ggtitle("July") +
+  ylab("NDVI") + xlab("NDVI Cluster")
+
+p
+
+
+
+#ggsave("/home/yousra/Drone_drought/manuscript/ndvi_cluster_june.png", plot = p, width = 5, height = 3, dpi =700)
+# 
+# p1 <- terra::rast("/home/yousra/Drone_drought/manuscript/ndvi_cluster_june.png")
+# 
+# img <- png::readPNG("/home/yousra/Drone_drought/manuscript/ndvi_cluster_june.png")
+# 
+# 
+# img <- readPNG("/home/yousra/Drone_drought/manuscript/ndvi_cluster_june.png")
+# 
+# # Set up an empty plot with correct dimensions
+# plot(1:2, type = "n", xlab = "", ylab = "", xaxt = 'n', yaxt = 'n')
+# rasterImage(img, 1, 1, 2, 2)
+# 
+# 
+# plot.new()
+# plot.window(xlim = c(0, 1), ylim = c(0, 1))
+# rasterImage(img, 0, 0, 1, 1)
+# p1
+```
+
+

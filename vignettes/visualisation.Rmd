@@ -1,0 +1,480 @@
+---
+title: "visualization"
+author: "Yousra"
+date: "2025-04-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+data <- read_csv(here::here("/home/yousra/Drone_drought/data/reflectance_data_24.csv"))
+setwd("/home/yousra/Drone_drought_24/R project/Drone_drought")
+
+getwd()
+```
+
+```{r}
+VI <- within(data, {
+  NDVI  <- (NIR_mean - R_mean) / (NIR_mean + R_mean)
+  NDRE  <- (NIR_mean - RE_mean) / (NIR_mean + RE_mean)
+  GNDVI <- (NIR_mean - G_mean) / (NIR_mean + G_mean)
+  SR    <- NIR_mean / R_mean
+  
+  # Estimate CWSI from observed values (image-based method)
+  T_min <- min(TIR_mean, na.rm = TRUE)
+  T_max <- max(TIR_mean, na.rm = TRUE)
+  CWSI  <- (TIR_mean - T_min) / (T_max - T_min)
+})
+
+```
+
+Visualize data 
+
+```{r}
+library(ggplot2)
+
+p1 <- ggplot(VI, aes(x = as.Date(date), y = NDVI, color = factor(tree))) +
+  geom_line() +
+  labs(title = "", x = "", y = "NDVI") +
+  theme_bw()+
+  theme(
+    legend.title = element_blank())
+
+p2 <- ggplot(VI, aes(x = as.Date(date), y = NDRE, color = factor(tree))) +
+  geom_line() +
+  labs(title = "", x = "", y = "NDRE") +
+  theme_bw()+
+   theme(
+    legend.title = element_blank())
+
+p3 <- ggplot(VI, aes(x = as.Date(date), y = GNDVI, color = factor(tree))) +
+  geom_line() +
+  labs(title = "", x = "", y = "GNDVI") +
+  theme_bw()+
+   theme(
+    legend.title = element_blank())
+
+p4 <- ggplot(VI, aes(x = as.Date(date), y = CWSI, color = factor(tree))) +
+  geom_line() +
+  labs(title = "", x = "", y = "CWSI") +
+  theme_bw()+
+   theme(
+    legend.title = element_blank())
+
+combined <- p1 + p2 + p3 + p4 + 
+  plot_layout(ncol = 2) 
+```
+
+calculate vegetation indices 
+
+```{r}
+
+VI_24 <- within(data, {
+  NDVI  <- (NIR_mean - R_mean) / (NIR_mean + R_mean)
+  NDRE  <- (NIR_mean - RE_mean) / (NIR_mean + RE_mean)
+  GNDVI <- (NIR_mean - G_mean) / (NIR_mean + G_mean)
+  SR    <- NIR_mean / R_mean
+  
+  # Estimate CWSI from observed values (image-based method)
+  T_min <- min(TIR_mean, na.rm = TRUE)
+  T_max <- max(TIR_mean, na.rm = TRUE)
+  CWSI  <- (TIR_mean - T_min) / (T_max - T_min)
+})
+
+```
+
+Visualize data 
+
+```{r}
+library(ggplot2)
+
+p1 <- ggplot(VI_24, aes(x = as.Date(date), y = NDVI, color = factor(Tree))) +
+  geom_line() +
+  labs(title = "", x = "", y = "NDVI") +
+  theme_bw()+
+  theme(
+    legend.title = element_blank())
+
+p2 <- ggplot(VI_24, aes(x = as.Date(date), y = NDRE, color = factor(Tree))) +
+  geom_line() +
+  labs(title = "", x = "", y = "NDRE") +
+  theme_bw()+
+   theme(
+    legend.title = element_blank())
+
+p3 <- ggplot(VI_24, aes(x = as.Date(date), y = GNDVI, color = factor(Tree))) +
+  geom_line() +
+  labs(title = "", x = "", y = "GNDVI") +
+  theme_bw()+
+   theme(
+    legend.title = element_blank())
+
+p4 <- ggplot(VI_24, aes(x = as.Date(date), y = CWSI, color = factor(Tree))) +
+  geom_line() +
+  labs(title = "", x = "", y = "CWSI") +
+  theme_bw()+
+   theme(
+    legend.title = element_blank())
+
+combined <- p1 + p2 + p3 + p4 + 
+  plot_layout(ncol = 2) 
+
+ggsave("vignettes/VI.png",width = 8, height = 5, dpi =700)
+```
+```{r}
+library(ggplot2)
+
+p1 <- ggplot(VI_24, aes(x = as.Date(date), y = TIR_mean, color = factor(Tree))) +
+  geom_line() +
+  labs(title = "", x = "", y = "NDVI") +
+  theme_bw()+
+  theme(
+    legend.title = element_blank())
+
+p2 <- ggplot(VI_24, aes(x = as.Date(date), y = NDRE, color = factor(Tree))) +
+  geom_line() +
+  labs(title = "", x = "", y = "NDRE") +
+  theme_bw()+
+   theme(
+    legend.title = element_blank())
+
+p3 <- ggplot(VI_24, aes(x = as.Date(date), y = GNDVI, color = factor(Tree))) +
+  geom_line() +
+  labs(title = "", x = "", y = "GNDVI") +
+  theme_bw()+
+   theme(
+    legend.title = element_blank())
+
+p4 <- ggplot(VI_24, aes(x = as.Date(date), y = CWSI, color = factor(Tree))) +
+  geom_line() +
+  labs(title = "", x = "", y = "CWSI") +
+  theme_bw()+
+   theme(
+    legend.title = element_blank())
+
+combined <- p1 + p2 + p3 + p4 + 
+  plot_layout(ncol = 2) 
+
+ggsave("vignettes/VI.png",width = 8, height = 5, dpi =700)
+```
+
+```{r}
+# Select relevant columns
+cor_data <- VI_24[, c("NDVI", "NIR_mean", "RE_mean", "R_mean", "TIR_mean", "CWSI", "NDRE")]
+
+# Calculate Pearson correlations
+cor_matrix <- cor(cor_data, use = "complete.obs")
+
+# Print matrix
+print(cor_matrix)
+
+# Optional: Visualize
+install.packages("corrplot")
+library(corrplot)
+corrplot(cor_matrix, method = "color", type = "upper", tl.cex = 0.8)
+
+```
+```{r}
+library(dplyr)
+
+library(dplyr)
+
+# 1. Start with the correct dataset and extract species
+df <- VI_24 %>%
+  mutate(Species = gsub("[0-9]", "", Tree))  # This removes the number, e.g., "Beech1" → "Beech"
+
+# 2. Select relevant variables
+selected_vars <- c("NDVI", "NIR_mean", "RE_mean", "R_mean", "TIR_mean")
+
+# 3. Check that all selected variables exist
+names(df)  # Make sure these are in the dataset
+
+# 4. Calculate correlation matrix by species
+cor_by_species <- df %>%
+  group_by(Species) %>%
+  do(CorMatrix = cor(select(., all_of(selected_vars)), use = "complete.obs"))
+
+# 5. View the correlation matrices
+cor_by_species$CorMatrix
+
+# Extract Beech correlation matrix
+beech_cor <- cor_by_species$CorMatrix[cor_by_species$Species == "Beech"][[1]]
+
+# Plot it
+corrplot(beech_cor, method = "color", type = "upper", 
+         tl.col = "black", addCoef.col = "black", number.cex = 0.8,
+         title = "Beech Correlation Matrix", mar = c(0,0,1,0))
+
+# Loop to plot all species correlation matrices
+for (i in 1:nrow(cor_by_species)) {
+  species_name <- cor_by_species$Species[i]
+  cor_matrix <- cor_by_species$CorMatrix[[i]]
+  
+  corrplot(cor_matrix, method = "color", type = "upper", 
+           tl.col = "black", addCoef.col = "black", number.cex = 0.8,
+           title = paste(species_name, "Correlation Matrix"), mar = c(0,0,1,0))
+}
+
+library(dplyr)
+library(Hmisc)
+
+# Subset columns
+selected_vars <- c("NDVI", "NIR_mean", "RE_mean", "R_mean", "TIR_mean")
+
+# Create a list to store results
+cor_test_results <- list()
+
+# Loop through each species
+for (sp in unique(df$Species)) {
+  sub_df <- df %>% filter(Species == sp) %>% select(all_of(selected_vars))
+  
+  # rcorr requires a matrix
+  rc <- rcorr(as.matrix(sub_df), type = "pearson")
+  
+  cor_test_results[[sp]] <- list(
+    corr = rc$r,
+    pval = rc$P
+  )
+}
+
+# Loop to compute and plot correlation matrices with significance
+for (sp in unique(df$Species)) {
+  # Subset data for current species and select relevant columns
+  sub_df <- df %>%
+    filter(Species == sp) %>%
+    select(all_of(selected_vars))
+  
+  # Remove rows with missing values in the selected variables
+  sub_df <- na.omit(sub_df)
+  
+  # Compute correlation and p-values using rcorr
+  rc <- rcorr(as.matrix(sub_df), type = "pearson")
+  corr_mat <- rc$r
+  p_mat <- rc$P
+  
+  # Store results (optional, if you still want to save)
+  cor_test_results[[sp]] <- list(
+    corr = corr_mat,
+    pval = p_mat
+  )
+  
+  # Plot the correlation matrix with significance
+  corrplot(corr_mat, method = "color", type = "upper",
+           p.mat = p_mat, sig.level = 0.05,  # Mask insignificant values
+           insig = "blank",                  # Blank out non-significant cells
+           tl.col = "black", 
+           addCoef.col = "black",
+           number.cex = 0.8,
+           title = paste(sp, "Correlation Matrix (p < 0.05)"),
+           mar = c(0, 0, 2, 0))  # Margin to fit title
+}
+
+```
+
+
+
+```{r}
+compute_ndvi_for_dates <- function(tif_folder, target_dates) {
+  library(terra)
+  library(stringr)
+  library(lubridate)
+
+  # Convert dates to Date objects
+  target_dates <- as.Date(target_dates)
+
+  # List tif files and filter by date pattern
+  tif_files <- list.files(tif_folder, pattern = "_Ortho\\.tif$", 
+                          full.names = TRUE, recursive = TRUE)
+
+  ndvi_outputs <- list()
+
+  for (tif_path in tif_files) {
+    filename <- basename(tif_path)
+    date_str <- str_extract(filename, "\\d{8}")
+    date_fmt <- as.Date(date_str, format = "%Y%m%d")
+
+    # Process only if date matches one of the target dates
+    if (!date_fmt %in% target_dates) next
+
+    # Read raster
+    r <- rast(tif_path)
+
+    # Skip if wrong number of bands
+    if (nlyr(r) != 7) {
+      message("Skipping (wrong band count): ", filename)
+      next
+    }
+
+    names(r) <- c("B", "G", "R", "RE", "NIR", "TIR", "alpha")
+    r <- r[[c("NIR", "R")]]  # Only need these two bands
+
+    # Compute NDVI
+    ndvi <- (r$NIR - r$R) / (r$NIR + r$R)
+    names(ndvi) <- paste0("NDVI_", format(date_fmt, "%Y%m%d"))
+
+    # Store result
+    ndvi_outputs[[as.character(date_fmt)]] <- ndvi
+
+    message("Processed NDVI for date: ", date_fmt)
+  }
+
+  return(ndvi_outputs)
+}
+
+
+```
+
+
+calculate rasters for lens 
+```{r}
+tif_folder <- "/home/yousra/remote_lens"
+target_dates <- c("2024-06-13", "2024-07-19", "2024-08-13", "2024-09-13")
+
+ndvi_list <- compute_ndvi_for_dates(tif_folder, target_dates)
+
+
+output_dir <- "/home/yousra/Drone_drought/vignettes/NDVI_rasters"
+
+# Create directory if it doesn't exist
+if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
+
+for (date in names(ndvi_list)) {
+  out_path <- file.path(output_dir, paste0("NDVI_", gsub("-", "", date), ".tif"))
+  
+  writeRaster(ndvi_list[[date]], 
+              filename = out_path, 
+              overwrite = TRUE)
+}
+
+```
+calculate rasters for saillon 
+```{r}
+tif_folder <- "/home/yousra/remote_saillon"
+target_dates <- c("2024-06-13", "2024-07-19", "2024-08-13", "2024-09-13")
+
+ndvi_list_s <- compute_ndvi_for_dates(tif_folder, target_dates)
+
+
+output_dir <- "/home/yousra/Drone_drought/vignettes/NDVI_rasters_s"
+
+# Create directory if it doesn't exist
+if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
+
+for (date in names(ndvi_list_s)) {
+  out_path <- file.path(output_dir, paste0("NDVI_", gsub("-", "", date), ".tif"))
+  
+  writeRaster(ndvi_list_s[[date]], 
+              filename = out_path, 
+              overwrite = TRUE)
+}
+
+```
+
+```{r}
+#plot rasters 
+
+# Combine all NDVI rasters into one SpatRaster stack
+ndvi_stack <- rast(ndvi_list)
+
+# Plot all in a multi-panel layout
+plot(ndvi_stack,
+     main = names(ndvi_stack),
+     col = terrain.colors(20),
+     range = c(0, 1),
+     nc = 2)  
+plot(ndvi_stack,
+     main = names(ndvi_stack),
+     col = rev(terrain.colors(20)),  # Reversed color palette
+     range = c(0, 1),
+     nc = 2)
+
+```
+
+
+```{r}
+plot_tir_for_dates <- function(tif_folder, target_dates) {
+  library(terra)
+  library(stringr)
+
+  target_dates <- as.Date(target_dates)
+
+  tif_files <- list.files(tif_folder, pattern = "_Ortho\\.tif$", 
+                          full.names = TRUE, recursive = TRUE)
+
+  for (tif_path in tif_files) {
+    filename <- basename(tif_path)
+    date_str <- str_extract(filename, "\\d{8}")
+    date_fmt <- as.Date(date_str, format = "%Y%m%d")
+
+    if (!date_fmt %in% target_dates) next
+
+    r <- rast(tif_path)
+
+    if (nlyr(r) != 7) {
+      message("Skipping file (wrong band count): ", filename)
+      next
+    }
+
+    names(r) <- c("B", "G", "R", "RE", "NIR", "TIR", "alpha")
+    tir <- r$TIR
+
+    # Plot
+    plot(tir,
+         main = paste("TIR -", date_fmt),
+         col = rev(heat.colors(30)),
+         range = c(minmax(tir)[1], minmax(tir)[2]))
+  }
+}
+
+
+extract_and_save_tir <- function(tif_folder, target_dates, output_dir) {
+  library(terra)
+  library(stringr)
+
+  target_dates <- as.Date(target_dates)
+  tif_files <- list.files(tif_folder, pattern = "_Ortho\\.tif$", 
+                          full.names = TRUE, recursive = TRUE)
+
+  if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
+
+  for (tif_path in tif_files) {
+    filename <- basename(tif_path)
+    date_str <- str_extract(filename, "\\d{8}")
+    date_fmt <- as.Date(date_str, format = "%Y%m%d")
+
+    if (!date_fmt %in% target_dates) next
+
+    r <- rast(tif_path)
+    if (nlyr(r) != 7) {
+      message("Skipping file (wrong band count): ", filename)
+      next
+    }
+
+    names(r) <- c("B", "G", "R", "RE", "NIR", "TIR", "alpha")
+    tir <- r$TIR
+
+    # Save to GeoTIFF
+    output_name <- paste0("TIR_", format(date_fmt, "%Y%m%d"), ".tif")
+    output_path <- file.path(output_dir, output_name)
+    writeRaster(tir, output_path, overwrite = TRUE)
+
+    message("Saved: ", output_path)
+  }
+}
+
+
+tif_folder <- "/home/yousra/remote_lens"
+target_dates <- c("2024-08-13")
+output_dir <- "/home/yousra/TIR_rasters"
+
+TIR <- extract_and_save_tir(tif_folder, target_dates, output_dir)
+
+
+
+TIR <- plot_tir_for_dates(tif_folder, target_dates)
+
+TIR <- terra::rast("/home/yousra/TIR_rasters/TIR_20240813.tif")
+
+ndvi_cor = focalPairs(c(ndvi_stack, TIR), w = 5,
+                      fun = "pearson", na.rm = TRUE)
+plot(ndvi_cor)
+```

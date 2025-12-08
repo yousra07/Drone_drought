@@ -1,0 +1,365 @@
+---
+title: "Lens VI"
+author: "Yousra"
+date: "2025-04-10"
+output: html_document
+---
+
+Write a function that go through every acquisition date to tif file read it and extraxt reflectance from specific polygones and store data in table 
+
+```{r setup, include=FALSE}
+# Load packages 
+library(sf)
+library(terra)
+library(dplyr)
+
+```
+
+```{r}
+
+library(terra)
+library(sf)
+library(dplyr)
+library(stringr)
+
+extract_reflectance_to_csv <- function(tif_folder, polygon_file, output_csv) {
+  # Load polygons
+  polygons <- st_read(polygon_file)
+  
+  # List all TIF files
+  tif_files <- list.files(tif_folder, pattern = "\\.tif$", full.names = TRUE)
+  
+  # Prepare result list
+  results <- list()
+  
+  # Loop over each TIF
+  for (tif_path in tif_files) {
+    # Extract date from filename
+    filename <- basename(tif_path)
+    date_str <- str_extract(filename, "\\d{8}")
+    date_fmt <- as.Date(date_str, format = "%Y%m%d")
+    
+    # Load raster
+    r <- rast(tif_path)
+    
+    # Check and match CRS
+    if (!st_crs(polygons) == crs(r)) {
+      polygons <- st_transform(polygons, crs(r))
+    }
+    
+    # Extract mean reflectance for each polygon
+    extracted <- terra::extract(r, vect(polygons), fun = mean, na.rm = TRUE)
+    
+    # Add polygon ID (assuming it has a column named "ID")
+    extracted$polygon_id <- polygons$ID
+    
+    # Add date
+    extracted$date <- date_fmt
+    
+    # Rename bands (optional, but clearer)
+    band_names <- paste0("Band_", seq_len(nlyr(r)))
+    names(extracted)[1:nlyr(r)] <- band_names
+    
+    results[[length(results) + 1]] <- extracted
+  }
+  
+  # Combine results
+  reflectance_df <- bind_rows(results)
+  
+  # Save to CSV
+  write.csv(reflectance_df, output_csv, row.names = FALSE)
+  
+  message("Reflectance data saved to: ", output_csv)
+  return(reflectance_df)
+}
+```
+
+
+```{r}
+extract_reflectance_to_csv <- function(tif_folder, polygon_file, output_csv) {
+  library(terra)
+  library(sf)
+  library(dplyr)
+  library(stringr)
+
+  # Load polygons
+  polygons <- st_read(polygon_file)
+
+  # List all TIF files
+  tif_files <- list.files(tif_folder, pattern = "\\.tif$", full.names = TRUE)
+
+  # Prepare result list
+  results <- list()
+
+  # Loop over each TIF
+  for (tif_path in tif_files) {
+    # Extract date from filename
+    filename <- basename(tif_path)
+    date_str <- str_extract(filename, "\\d{8}")
+    date_fmt <- as.Date(date_str, format = "%Y%m%d")
+
+    # Load raster
+    r <- rast(tif_path)
+
+    # Match CRS if needed
+    if (!st_crs(polygons) == crs(r)) {
+      polygons <- st_transform(polygons, crs(r))
+    }
+
+    # Extract mean reflectance for each polygon
+    extracted <- terra::extract(r, vect(polygons), fun = mean, na.rm = TRUE)
+
+    # Rename ID column to polygon_id
+    names(extracted)[1] <- "polygon_id"
+
+    # Rename bands
+    band_names <- paste0("Band_", seq_len(nlyr(r)))
+    names(extracted)[2:(nlyr(r) + 1)] <- band_names
+
+    # Add date column
+    extracted$date <- date_fmt
+
+    # Store result
+    results[[length(results) + 1]] <- extracted
+  }
+
+  # Combine all results into one dataframe
+  reflectance_df <- bind_rows(results)
+
+  # Save to CSV
+  write.csv(reflectance_df, output_csv, row.names = FALSE)
+
+  message("Reflectance data saved to: ", output_csv)
+  return(reflectance_df)
+}
+
+
+```
+
+Function with statistics and renaming bands 
+```{r}
+extract_reflectance_to_csv <- function(tif_folder, polygon_file, output_csv) {
+  library(terra)
+  library(sf)
+  library(dplyr)
+  library(stringr)
+
+  # Custom function to calculate multiple stats per band
+  stats_fun <- function(values) {
+    c(mean = mean(values, na.rm = TRUE),
+      median = median(values, na.rm = TRUE),
+      sd = sd(values, na.rm = TRUE),
+      min = min(values, na.rm = TRUE),
+      max = max(values, na.rm = TRUE))
+  }
+
+  # Load polygons
+  polygons <- st_read(polygon_file)
+
+  # List all TIF files in the folder
+  tif_files <- list.files(tif_folder, pattern = "\\.tif$", full.names = TRUE)
+
+  # Prepare a list to store results
+  results <- list()
+
+  # Loop over each TIF file
+  for (tif_path in tif_files) {
+    # Extract date from filename (assuming format like "xxx_YYYYMMDD_xxx.tif")
+    filename <- basename(tif_path)
+    date_str <- str_extract(filename, "\\d{8}")
+    date_fmt <- as.Date(date_str, format = "%Y%m%d")
+
+    # Load raster
+    r <- rast(tif_path)
+
+    # Assign meaningful band names
+    names(r) <- c("Blue", "Green", "Red", "RedEdge", "NIR", "Thermal", "alpha")
+
+    # Match CRS between polygons and raster
+    if (!st_crs(polygons) == crs(r)) {
+      polygons <- st_transform(polygons, crs(r))
+    }
+
+    # Extract multiple stats
+    extracted <- terra::extract(r, vect(polygons), fun = stats_fun)
+    extracted <- as.data.frame(extracted)  # Convert list columns to data frame
+
+    # Rename the first column (ID) to polygon_id
+    names(extracted)[1] <- "polygon_id"
+
+    # Rename band stat columns using actual band names
+    band_names <- names(r)
+    stat_types <- c("mean", "median", "sd", "min", "max")
+    stat_cols <- paste0(rep(band_names, each = length(stat_types)), "_", stat_types)
+    names(extracted)[2:ncol(extracted)] <- stat_cols
+
+    # Add date column (repeat for each row)
+    extracted$date <- rep(date_fmt, nrow(extracted))
+
+    # Store in results list
+    results[[length(results) + 1]] <- extracted
+  }
+
+  # Combine all results into one data frame
+  reflectance_df <- bind_rows(results)
+
+  # Save as CSV
+  write.csv(reflectance_df, output_csv, row.names = FALSE)
+
+  message("Reflectance data saved to: ", output_csv)
+  return(reflectance_df)
+}
+```
+
+```{r}
+install.packages("ssh")
+library(ssh)
+
+# Connect to remote host
+session <- ssh_connect("yousra@130.92.119.132")
+
+# List files
+ssh_exec_wait(session, command = "ls /data_1/saillon_24")
+
+# Download file
+scp_download(session, "/data_1/saillon_24/your_file.csv", to = "~/Downloads")
+
+# Disconnect
+ssh_disconnect(session)
+
+```
+
+function and dropping the alpha band 
+
+```{r}
+extract_reflectance_to_csv <- function(tif_folder, polygon_file, output_csv) {
+  library(terra)
+  library(sf)
+  library(dplyr)
+  library(stringr)
+
+  # Load polygons
+  polygons <- st_read(polygon_file)
+
+  # List all TIF files
+  tif_files <- list.files(tif_folder, pattern = "\\.tif$", full.names = TRUE)
+
+  results <- list()
+
+  for (tif_path in tif_files) {
+    filename <- basename(tif_path)
+    date_str <- str_extract(filename, "\\d{8}")
+    date_fmt <- as.Date(date_str, format = "%Y%m%d")
+
+    r <- rast(tif_path)
+    
+    # Assign band names
+    names(r) <- c("Blue", "Green", "Red", "RedEdge", "NIR", "Thermal", "alpha")
+
+    # Drop alpha band
+    r <- r[[names(r) != "alpha"]]
+
+    # Match CRS
+    if (!st_crs(polygons) == crs(r)) {
+      polygons <- st_transform(polygons, crs(r))
+    }
+
+    # Compute statistics for each band
+    stat_functions <- list(mean = mean, median = median, sd = sd, min = min, max = max)
+
+    extracted <- lapply(stat_functions, function(fun) {
+      terra::extract(r, vect(polygons), fun = fun, na.rm = TRUE) %>%
+        as.data.frame()
+    })
+
+    # Merge all stats
+    stats_df <- Reduce(function(x, y) {
+      merge(x, y, by = "ID", suffixes = c("_mean", "_median", "_sd", "_min", "_max"))
+    }, extracted)
+
+    # Rename columns
+    band_names <- names(r)
+    colnames(stats_df) <- c("polygon_id", 
+      paste0(rep(band_names, each = length(stat_functions)), "_", rep(names(stat_functions), times = length(band_names)))
+    )
+
+    stats_df$date <- date_fmt
+
+    results[[length(results) + 1]] <- stats_df
+  }
+
+  reflectance_df <- bind_rows(results)
+
+  # Save to CSV
+  write.csv(reflectance_df, output_csv, row.names = FALSE)
+  message("Reflectance data saved to: ", output_csv)
+
+  return(reflectance_df)
+}
+
+```
+
+
+```{r}
+#apply function 
+
+tif_folder <- "/home/yousra/Drone_drought_24/saillon_24"
+polygon_file <- "/home/yousra/Drone_drought_24/saillon_24/sp_saillon_1m.shp"  # Update this path
+output_csv <- "reflectance_output.csv"
+
+data <- extract_reflectance_to_csv(tif_folder, polygon_file, output_csv)
+
+```
+
+analysing data 
+
+```{r}
+library(ggplot2)
+
+ggplot(data, aes(x = as.Date(date), y = NIR_mean, color = factor(polygon_id))) +
+  geom_line() +
+  labs(title = "NIR Mean Over Time", x = "Date", y = "NIR Mean Reflectance") +
+  theme_minimal()
+
+library(tidyr)
+
+long_df <- pivot_longer(data, cols = ends_with("_mean"),
+                        names_to = "band", values_to = "value")
+
+ggplot(long_df, aes(x = band, y = value, group = interaction(polygon_id, date), color = factor(polygon_id))) +
+  geom_line() +
+  labs(title = "Spectral Profile", x = "Band", y = "Mean Reflectance") +
+  theme_minimal()
+
+
+data <- within(data, {
+  NDVI  <- (NIR_mean - Red_mean) / (NIR_mean + Red_mean)
+  NDRE  <- (NIR_mean - RedEdge_mean) / (NIR_mean + RedEdge_mean)
+  GNDVI <- (NIR_mean - Green_mean) / (NIR_mean + Green_mean)
+  SR    <- NIR_mean / Red_mean
+  
+  # Estimate CWSI from observed values (image-based method)
+  T_min <- min(Thermal_mean, na.rm = TRUE)
+  T_max <- max(Thermal_mean, na.rm = TRUE)
+  CWSI  <- (Thermal_mean - T_min) / (T_max - T_min)
+})
+
+```
+
+```{r}
+
+
+
+list.files("/home/Drone_drought_24/saillon_24", pattern = "\\.shp$", full.names = TRUE)
+
+ggplot(result_df, aes(x=))
+
+r <- terra::rast(here::here("/home/yousra/Drone_drought_24/saillon_24/20240704_saillon_Ortho.tif"))
+nlyr(r) 
+names(r)   # Band names (usually just Band_1, Band_2, ...)
+plot(r)    # Plots the bands (useful for single bands or RGB)
+
+names(r) <- c("Blue", "Green", "Red", "RedEdge", "NIR", "Thermal", "alpha")
+max(r$alpha)
+max(r$Thermal)
+```

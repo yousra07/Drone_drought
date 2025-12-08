@@ -1,0 +1,264 @@
+---
+title: "data extraction"
+author: "Yousra"
+date: "2025-04-25"
+output: html_document
+---
+
+
+
+First create remote directory 
+(base) yousra@UAVT16:~$ mkdir ~/remote_saillon
+(base) yousra@UAVT16:~$ sshfs yousra@130.92.119.132:/data_1/saillon_24/metashape-projects/2024 ~/remote_saillon
+The remote_saillon directory will be **created on local machine — it's just a folder that acts as a "window" into the remote server once it's mounted with sshfs. 
+
+
+##function
+Extract data Saillon 
+
+```{r}
+extract_reflectance_to_csv <- function(tif_folder, polygon_file, output_csv) {
+  library(terra)
+  library(sf)
+  library(dplyr)
+  library(stringr)
+
+  # Load polygons
+  polygons <- st_read(polygon_file)
+
+  # List only reflectance orthomosaics
+  tif_files <- list.files(tif_folder, pattern = "_Ortho\\.tif$", 
+                          full.names = TRUE, recursive = TRUE)
+
+  results <- list()
+
+  for (tif_path in tif_files) {
+    filename <- basename(tif_path)
+    date_str <- str_extract(filename, "\\d{8}")
+    date_fmt <- as.Date(date_str, format = "%Y%m%d")
+
+    r <- rast(tif_path)
+
+    # Skip files with unexpected number of bands
+    if (nlyr(r) != 7) {
+      message("Skipping file due to unexpected number of bands: ", filename)
+      next
+    }
+
+    # Name and drop alpha band
+    names(r) <- c("B", "G", "R", "RE", "NIR", "TIR", "alpha")
+    r <- r[[names(r) != "alpha"]]
+
+    # Match CRS
+    if (!st_crs(polygons) == crs(r)) {
+      polygons <- st_transform(polygons, crs(r))
+    }
+
+    # Define stat functions
+    stat_functions <- list(mean = mean, median = median, sd = sd, min = min, max = max)
+
+    # Extract stats
+    extracted <- lapply(names(stat_functions), function(stat_name) {
+      df <- terra::extract(r, vect(polygons), fun = stat_functions[[stat_name]], na.rm = TRUE) %>%
+        as.data.frame()
+      names(df)[-1] <- paste0(names(r), "_", stat_name)
+      df
+    })
+
+    # Merge stats into one dataframe
+    stats_df <- Reduce(function(x, y) merge(x, y, by = "ID"), extracted)
+
+    # Clean up and annotate
+    colnames(stats_df)[1] <- "polygon_id"
+    stats_df$date <- date_fmt
+    stats_df$image_name <- filename
+
+    results[[length(results) + 1]] <- stats_df
+  }
+
+  # Combine all results
+  reflectance_df <- bind_rows(results)
+
+  # Save to CSV
+  write.csv(reflectance_df, output_csv, row.names = FALSE)
+  message("Reflectance data saved to: ", output_csv)
+
+  return(reflectance_df)
+}
+
+```
+
+extract data 
+```{r}
+tif_folder <- "/home/yousra/remote_saillon"
+polygon_file <- "/home/yousra/Drone_drought_24/saillon_24/sp_saillon_1m.shp"
+output_csv <- "/home/yousra/Drone_drought_24/reflectance_output.csv"
+
+reflectance_data <- extract_reflectance_to_csv(tif_folder, polygon_file, output_csv)
+
+```
+
+rename polygons id to trees 
+
+```{r}
+# Rename 'polygon_id' to 'tree'
+colnames(reflectance_data)[colnames(reflectance_data) == "polygon_id"] <- "Tree"
+
+# Replace values in 'tree' column
+reflectance_data$Tree <- factor(reflectance_data$Tree,
+                                levels = c(1, 2, 3, 4),
+                                labels = c("Beech1", "Beech2", "Oak1", "Oak2"))
+
+# Output the modified data frame
+print(reflectance_data)
+
+```
+
+
+##function
+Extract data lens 
+
+mkdir ~/remote_saillon
+sshfs yousra@130.92.119.132:/data_1/lens_24/metashape-projects/2024 ~/remote_lens
+
+```{r}
+tif_folder <- "/home/yousra/remote_lens"
+polygon_file <- "/home/yousra/Drone_drought_24/lens_24/lens_sp_1m.shp"
+output_csv <- "/home/yousra/Drone_drought_24/reflectance_output_lens.csv"
+
+reflectance_data_lens <- extract_reflectance_to_csv(tif_folder, polygon_file, output_csv)
+
+```
+
+rename polygons id to trees 
+
+```{r}
+# Rename 'polygon_id' to 'tree'
+colnames(reflectance_data_lens)[colnames(reflectance_data_lens) == "polygon_id"] <- "Tree"
+
+# Replace values in 'tree' column
+reflectance_data_lens$Tree <- factor(reflectance_data_lens$Tree,
+                                levels = c(1, 2),
+                                labels = c("Pine1", "Pine2"))
+
+# Output the modified data frame
+print(reflectance_data_lens)
+
+```
+
+merge 2 data sets 
+```{r}
+reflectance_data_24 <- rbind(reflectance_data, reflectance_data_lens)
+write.csv(reflectance_data_24, "/home/yousra/Drone_drought_24/reflectance_data_24.csv")
+
+```
+
+calculate vegetation indices 
+
+```{r}
+
+VI <- within(reflectance_data, {
+  NDVI  <- (NIR_mean - R_mean) / (NIR_mean + R_mean)
+  NDRE  <- (NIR_mean - RE_mean) / (NIR_mean + RE_mean)
+  GNDVI <- (NIR_mean - G_mean) / (NIR_mean + G_mean)
+  SR    <- NIR_mean / R_mean
+  
+  # Estimate CWSI from observed values (image-based method)
+  T_min <- min(TIR_mean, na.rm = TRUE)
+  T_max <- max(TIR_mean, na.rm = TRUE)
+  CWSI  <- (TIR_mean - T_min) / (T_max - T_min)
+})
+
+```
+
+Visualize data 
+
+```{r}
+library(ggplot2)
+
+p1 <- ggplot(VI, aes(x = as.Date(date), y = NDVI, color = factor(tree))) +
+  geom_line() +
+  labs(title = "", x = "", y = "NDVI") +
+  theme_bw()+
+  theme(
+    legend.title = element_blank())
+
+p2 <- ggplot(VI, aes(x = as.Date(date), y = NDRE, color = factor(tree))) +
+  geom_line() +
+  labs(title = "", x = "", y = "NDRE") +
+  theme_bw()+
+   theme(
+    legend.title = element_blank())
+
+p3 <- ggplot(VI, aes(x = as.Date(date), y = GNDVI, color = factor(tree))) +
+  geom_line() +
+  labs(title = "", x = "", y = "GNDVI") +
+  theme_bw()+
+   theme(
+    legend.title = element_blank())
+
+p4 <- ggplot(VI, aes(x = as.Date(date), y = CWSI, color = factor(tree))) +
+  geom_line() +
+  labs(title = "", x = "", y = "CWSI") +
+  theme_bw()+
+   theme(
+    legend.title = element_blank())
+
+combined <- p1 + p2 + p3 + p4 + 
+  plot_layout(ncol = 2) 
+```
+
+calculate vegetation indices 
+
+```{r}
+
+VI_24 <- within(reflectance_data_24, {
+  NDVI  <- (NIR_mean - R_mean) / (NIR_mean + R_mean)
+  NDRE  <- (NIR_mean - RE_mean) / (NIR_mean + RE_mean)
+  GNDVI <- (NIR_mean - G_mean) / (NIR_mean + G_mean)
+  SR    <- NIR_mean / R_mean
+  
+  # Estimate CWSI from observed values (image-based method)
+  T_min <- min(TIR_mean, na.rm = TRUE)
+  T_max <- max(TIR_mean, na.rm = TRUE)
+  CWSI  <- (TIR_mean - T_min) / (T_max - T_min)
+})
+
+```
+
+Visualize data 
+
+```{r}
+library(ggplot2)
+
+p1 <- ggplot(VI_24, aes(x = as.Date(date), y = NDVI, color = factor(Tree))) +
+  geom_line() +
+  labs(title = "", x = "", y = "NDVI") +
+  theme_bw()+
+  theme(
+    legend.title = element_blank())
+
+p2 <- ggplot(VI_24, aes(x = as.Date(date), y = NDRE, color = factor(Tree))) +
+  geom_line() +
+  labs(title = "", x = "", y = "NDRE") +
+  theme_bw()+
+   theme(
+    legend.title = element_blank())
+
+p3 <- ggplot(VI_24, aes(x = as.Date(date), y = GNDVI, color = factor(Tree))) +
+  geom_line() +
+  labs(title = "", x = "", y = "GNDVI") +
+  theme_bw()+
+   theme(
+    legend.title = element_blank())
+
+p4 <- ggplot(VI_24, aes(x = as.Date(date), y = CWSI, color = factor(Tree))) +
+  geom_line() +
+  labs(title = "", x = "", y = "CWSI") +
+  theme_bw()+
+   theme(
+    legend.title = element_blank())
+
+combined <- p1 + p2 + p3 + p4 + 
+  plot_layout(ncol = 2) 
+```
